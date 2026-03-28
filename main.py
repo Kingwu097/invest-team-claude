@@ -18,6 +18,9 @@ from config.settings import settings
 from agents.fundamental import FundamentalAgent
 from agents.macro import MacroAgent
 from agents.sentiment import SentimentAgent
+from agents.advisor import AdvisorAgent
+from agents.quant import QuantAgent
+from agents.risk_officer import RiskOfficerAgent
 from debate.orchestrator import DebateOrchestrator
 from models.report import AnalysisReport
 
@@ -93,6 +96,39 @@ async def run_analysis(stock_code: str):
     orchestrator = DebateOrchestrator(online_agents)
     consensus = await orchestrator.run_debate(reports)
 
+    # Phase 3: 决策层
+    print(f"\n💼 Phase 3: 决策层（理财顾问 + 量化研究员）...\n")
+    advisor = AdvisorAgent(llm)
+    quant_agent = QuantAgent(llm)
+
+    proposal_task = advisor.generate_proposal(consensus, reports)
+    quant_task = quant_agent.assess(stock_code, stock_name, reports)
+    results_34 = await asyncio.gather(proposal_task, quant_task, return_exceptions=True)
+
+    proposal = results_34[0] if not isinstance(results_34[0], Exception) else None
+    quant_assessment = results_34[1] if not isinstance(results_34[1], Exception) else None
+
+    if proposal:
+        print(f"  ✅ 理财顾问: {proposal.action.value} | 仓位 {proposal.target_position_pct}% | 信心度 {proposal.confidence}%")
+    else:
+        print(f"  ❌ 理财顾问: 建议生成失败")
+    if quant_assessment:
+        print(f"  ✅ 量化研究员: 综合评分 {quant_assessment.composite_score}/100 | 仓位 {quant_assessment.position_sizing_pct}%")
+    else:
+        print(f"  ❌ 量化研究员: 评估失败")
+
+    # Phase 4: 审查层
+    risk_review = None
+    if proposal:
+        print(f"\n🛡️  Phase 4: 审查层（风控总监审核）...\n")
+        risk_officer = RiskOfficerAgent(llm)
+        risk_review = await risk_officer.review(proposal, quant_assessment, consensus)
+        if risk_review:
+            result_names = {"approved": "✅ 通过", "approved_with_conditions": "⚠️ 有条件通过", "rejected": "❌ 驳回", "needs_revision": "🔄 需修改"}
+            print(f"  {result_names.get(risk_review.result.value, risk_review.result.value)} | 风险评分 {risk_review.risk_score}/100 | 批准仓位 {risk_review.approved_position_pct}%")
+            for w in risk_review.warnings:
+                print(f"  ⚠️ {w}")
+
     elapsed = time.time() - start_time
 
     # 输出报告
@@ -107,6 +143,12 @@ async def run_analysis(stock_code: str):
 
     # 输出到终端
     print(consensus.to_markdown())
+    if proposal:
+        print("\n" + proposal.to_markdown())
+    if quant_assessment:
+        print("\n" + quant_assessment.to_markdown())
+    if risk_review:
+        print("\n" + risk_review.to_markdown())
 
     # 保存到文件
     output_dir = settings.OUTPUT_DIR

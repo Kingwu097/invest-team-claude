@@ -337,6 +337,7 @@
     };
     const ROLE_NAMES = {
       fundamental: '基本面', macro: '宏观', sentiment: '情绪',
+      advisor: '理财顾问', quant: '量化', risk_officer: '风控',
     };
     const RATING_COLORS = {
       strong_buy: 'bull', buy: 'bull', neutral: 'neutral',
@@ -562,6 +563,40 @@
             dotClass = 'bear';
             content = `分析失败: ${evt.data?.error || '未知错误'}`;
             break;
+          case 'proposal_started':
+            dotClass = 'loading';
+            content = '理财顾问 制定投资建议中...';
+            break;
+          case 'proposal_completed':
+            dotClass = evt.data?.action === 'buy' || evt.data?.action === 'increase' ? 'bull' : 
+                       evt.data?.action === 'sell' || evt.data?.action === 'decrease' ? 'bear' : 'neutral';
+            content = `理财顾问: ${evt.data?.action} | 仓位 ${evt.data?.position_pct}%`;
+            detail = evt.data?.reasoning || '';
+            break;
+          case 'quant_started':
+            dotClass = 'loading';
+            content = '量化研究员 定量评估中...';
+            break;
+          case 'quant_completed':
+            dotClass = 'accent';
+            content = `量化评分: ${evt.data?.composite_score}/100 | 仓位 ${evt.data?.position_pct}%`;
+            detail = `估值:${evt.data?.valuation_score} 动量:${evt.data?.momentum_score} 质量:${evt.data?.quality_score}`;
+            if (evt.data?.volatility) detail += ` | 波动率:${evt.data.volatility}%`;
+            if (evt.data?.sharpe) detail += ` | 夏普:${evt.data.sharpe}`;
+            break;
+          case 'risk_review_started':
+            dotClass = 'loading';
+            content = '风控总监 审核中...';
+            break;
+          case 'risk_review_completed': {
+            const rr = evt.data?.result;
+            dotClass = rr === 'approved' ? 'bull' : rr === 'rejected' ? 'bear' : 'neutral';
+            const resultNames = { approved: '✅ 通过', approved_with_conditions: '⚠️ 有条件通过', rejected: '❌ 驳回', needs_revision: '🔄 需修改' };
+            content = `风控审核: ${resultNames[rr] || rr} | 批准仓位 ${evt.data?.approved_position_pct}%`;
+            detail = `风险评分: ${evt.data?.risk_score}/100`;
+            if (evt.data?.warnings?.length) detail += ` | 警告: ${evt.data.warnings.join('; ')}`;
+            break;
+          }
           default:
             if (evt.type?.includes('round') || evt.type?.includes('confidence')) continue;
             break;

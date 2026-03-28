@@ -17,6 +17,9 @@ from typing import Optional
 from agents.fundamental import FundamentalAgent
 from agents.macro import MacroAgent
 from agents.sentiment import SentimentAgent
+from agents.advisor import AdvisorAgent
+from agents.quant import QuantAgent
+from agents.risk_officer import RiskOfficerAgent
 from config.llm_client import LLMClient, LLMError
 from config.settings import settings
 from core.event_bus import EventBus, event_bus
@@ -82,6 +85,17 @@ class AnalysisPipeline:
                 session_id, stock_code, stock_name, reports
             )
 
+            # Phase 3: 决策层（理财顾问 + 量化研究员）
+            proposal, quant_assessment = await self._run_decision(
+                session_id, stock_code, stock_name, consensus, reports
+            )
+
+            # Phase 4: 审查层（风控总监）
+            risk_review = await self._run_risk_review(
+                session_id, stock_code, stock_name,
+                proposal, quant_assessment, consensus
+            )
+
             elapsed = time.time() - start_time
             total_tokens = self._llm.total_tokens if self._llm else 0
 
@@ -103,6 +117,9 @@ class AnalysisPipeline:
                     "total_tokens": total_tokens,
                     "is_high_divergence": consensus.is_high_divergence,
                     "is_deadlock": consensus.is_deadlock,
+                    "has_proposal": proposal is not None,
+                    "has_risk_review": risk_review is not None,
+                    "risk_result": risk_review.result.value if risk_review else None,
                 },
                 summary=f"分析完成: {consensus.final_rating.value} ({consensus.consensus_confidence}%)",
             )
@@ -114,6 +131,9 @@ class AnalysisPipeline:
                 "reports": reports,
                 "consensus": consensus,
                 "rounds": rounds_data,
+                "proposal": proposal,
+                "quant_assessment": quant_assessment,
+                "risk_review": risk_review,
                 "elapsed": round(elapsed, 1),
                 "total_tokens": total_tokens,
             }
@@ -307,6 +327,116 @@ class AnalysisPipeline:
         )
 
         return consensus, orchestrator.rounds
+
+    async def _run_decision(
+        self, session_id: str, stock_code: str, stock_name: str,
+        consensus: ConsensusReport, reports: list[AnalysisReport],
+    ) -> tuple:
+        """Phase 3: 决策层——理财顾问 + 量化研究员并行。"""
+        # 理财顾问
+        await self._emit(
+            EventType.PROPOSAL_STARTED, session_id, stock_code,
+            stock_name=stock_name, agent_role="advisor",
+            summary="理财顾问开始制定投资建议",
+        )
+
+        advisor = AdvisorAgent(self._llm)
+        quant_agent = QuantAgent(self._llm)
+
+        # 量化研究员
+        await self._emit(
+            EventType.QUANT_STARTED, session_id, stock_code,
+            stock_name=stock_name, agent_role="quant",
+            summary="量化研究员开始定量评估",
+        )
+
+        # 并行执行
+        proposal_task = advisor.generate_proposal(consensus, reports)
+        quant_task = quant_agent.assess(stock_code, stock_name, reports)
+        proposal, quant_assessment = await asyncio.gather(
+            proposal_task, quant_task, return_exceptions=True
+        )
+
+        # 处理结果
+        if isinstance(proposal, Exception):
+            logger.error(f"理财顾问失败: {proposal}")
+            proposal = None
+        if isinstance(quant_assessment, Exception):
+            logger.error(f"量化研究员失败: {quant_assessment}")
+            quant_assessment = None
+
+        if proposal:
+            await self._emit(
+                EventType.PROPOSAL_COMPLETED, session_id, stock_code,
+                stock_name=stock_name, agent_role="advisor",
+                rating=proposal.action.value,
+                confidence=proposal.confidence,
+                data={
+                    "action": proposal.action.value,
+                    "position_pct": proposal.target_position_pct,
+                    "time_horizon": proposal.time_horizon,
+                    "reasoning": proposal.reasoning[:200],
+                    "stop_loss": proposal.stop_loss_pct,
+                    "take_profit": proposal.take_profit_pct,
+                },
+                summary=f"理财顾问: {proposal.action.value} | 仓位 {proposal.target_position_pct}%",
+            )
+
+        if quant_assessment:
+            await self._emit(
+                EventType.QUANT_COMPLETED, session_id, stock_code,
+                stock_name=stock_name, agent_role="quant",
+                confidence=quant_assessment.composite_score,
+                data={
+                    "valuation_score": quant_assessment.valuation_score,
+                    "momentum_score": quant_assessment.momentum_score,
+                    "quality_score": quant_assessment.quality_score,
+                    "composite_score": quant_assessment.composite_score,
+                    "position_pct": quant_assessment.position_sizing_pct,
+                    "volatility": quant_assessment.volatility_30d,
+                    "max_drawdown": quant_assessment.max_drawdown_60d,
+                    "sharpe": quant_assessment.sharpe_estimate,
+                },
+                summary=f"量化评分: {quant_assessment.composite_score}/100 | 仓位 {quant_assessment.position_sizing_pct}%",
+            )
+
+        return proposal, quant_assessment
+
+    async def _run_risk_review(
+        self, session_id: str, stock_code: str, stock_name: str,
+        proposal, quant_assessment, consensus: ConsensusReport,
+    ):
+        """Phase 4: 审查层——风控总监审核。"""
+        if not proposal:
+            logger.warning("无投资建议，跳过风控审核")
+            return None
+
+        await self._emit(
+            EventType.RISK_REVIEW_STARTED, session_id, stock_code,
+            stock_name=stock_name, agent_role="risk_officer",
+            summary="风控总监开始审核",
+        )
+
+        risk_officer = RiskOfficerAgent(self._llm)
+        risk_review = await risk_officer.review(proposal, quant_assessment, consensus)
+
+        if risk_review:
+            await self._emit(
+                EventType.RISK_REVIEW_COMPLETED, session_id, stock_code,
+                stock_name=stock_name, agent_role="risk_officer",
+                data={
+                    "result": risk_review.result.value,
+                    "risk_score": risk_review.risk_score,
+                    "overall_risk": risk_review.overall_risk.value,
+                    "approved_position_pct": risk_review.approved_position_pct,
+                    "conditions": risk_review.conditions,
+                    "warnings": risk_review.warnings,
+                    "reasoning": risk_review.reasoning[:200],
+                },
+                summary=f"风控审核: {risk_review.result.value} | 风险 {risk_review.risk_score}/100 | 批准仓位 {risk_review.approved_position_pct}%",
+            )
+
+        return risk_review
 
     async def _emit(
         self,

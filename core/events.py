@@ -40,6 +40,16 @@ class EventType(str, Enum):
     # 信心度
     CONFIDENCE_CHANGED = "confidence_changed"
 
+    # 决策层
+    PROPOSAL_STARTED = "proposal_started"
+    PROPOSAL_COMPLETED = "proposal_completed"
+    QUANT_STARTED = "quant_started"
+    QUANT_COMPLETED = "quant_completed"
+
+    # 审查层
+    RISK_REVIEW_STARTED = "risk_review_started"
+    RISK_REVIEW_COMPLETED = "risk_review_completed"
+
 
 class AnalysisEvent(BaseModel):
     """分析事件。所有事件的统一结构。"""

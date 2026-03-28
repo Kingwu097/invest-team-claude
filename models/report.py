@@ -23,6 +23,11 @@ class AgentRole(str, Enum):
     FUNDAMENTAL = "fundamental"
     MACRO = "macro"
     SENTIMENT = "sentiment"
+    # 决策层
+    ADVISOR = "advisor"
+    QUANT = "quant"
+    # 审查层
+    RISK_OFFICER = "risk_officer"
 
 
 class RoundType(str, Enum):
@@ -271,4 +276,169 @@ class ConsensusReport(BaseModel):
         lines.append(
             "\n---\n*本报告由 AI 生成，仅供参考，不构成投资建议。投资有风险，入市需谨慎。*"
         )
+        return "\n".join(lines)
+
+
+# === 决策层模型 ===
+
+
+class PortfolioAction(str, Enum):
+    """投资组合操作。"""
+    BUY = "buy"
+    SELL = "sell"
+    HOLD = "hold"
+    INCREASE = "increase"
+    DECREASE = "decrease"
+
+
+class InvestmentProposal(BaseModel):
+    """理财顾问的投资建议。"""
+    stock_code: str
+    stock_name: str
+    timestamp: datetime = Field(default_factory=datetime.now)
+    action: PortfolioAction
+    target_position_pct: float = Field(ge=0, le=100, description="建议仓位占比%")
+    reasoning: str
+    bull_case: str = ""
+    bear_case: str = ""
+    confidence: int = Field(ge=0, le=100)
+    time_horizon: str = ""  # "短期1-2周" / "中期1-3月" / "长期6月+"
+    key_catalysts: list[str] = Field(default_factory=list)
+    stop_loss_pct: Optional[float] = None
+    take_profit_pct: Optional[float] = None
+
+    def to_markdown(self) -> str:
+        action_names = {
+            PortfolioAction.BUY: "买入", PortfolioAction.SELL: "卖出",
+            PortfolioAction.HOLD: "持有", PortfolioAction.INCREASE: "加仓",
+            PortfolioAction.DECREASE: "减仓",
+        }
+        lines = [
+            f"### 理财顾问建议: {self.stock_name} ({self.stock_code})",
+            f"**操作**: {action_names.get(self.action, self.action.value)} | "
+            f"**建议仓位**: {self.target_position_pct}% | "
+            f"**信心度**: {self.confidence}%",
+            f"**投资周期**: {self.time_horizon}",
+            f"\n**核心逻辑**: {self.reasoning}",
+        ]
+        if self.bull_case:
+            lines.append(f"\n**看多论据**: {self.bull_case}")
+        if self.bear_case:
+            lines.append(f"**看空论据**: {self.bear_case}")
+        if self.key_catalysts:
+            lines.append("\n**关键催化剂**:")
+            for c in self.key_catalysts:
+                lines.append(f"- {c}")
+        if self.stop_loss_pct is not None:
+            lines.append(f"\n**止损**: -{self.stop_loss_pct}% | **止盈**: +{self.take_profit_pct}%")
+        return "\n".join(lines)
+
+
+class QuantAssessment(BaseModel):
+    """量化研究员的定量评估。"""
+    stock_code: str
+    stock_name: str
+    timestamp: datetime = Field(default_factory=datetime.now)
+    # 量化信号
+    valuation_score: int = Field(ge=0, le=100, description="估值评分")
+    momentum_score: int = Field(ge=0, le=100, description="动量评分")
+    quality_score: int = Field(ge=0, le=100, description="质量评分")
+    composite_score: int = Field(ge=0, le=100, description="综合评分")
+    # 风险度量
+    volatility_30d: Optional[float] = None  # 30日波动率
+    max_drawdown_60d: Optional[float] = None  # 60日最大回撤
+    sharpe_estimate: Optional[float] = None  # 夏普比率估算
+    # 建议
+    position_sizing_pct: float = Field(ge=0, le=100, description="建议仓位%")
+    reasoning: str = ""
+
+    def to_markdown(self) -> str:
+        lines = [
+            f"### 量化研究员评估: {self.stock_name} ({self.stock_code})",
+            f"**综合评分**: {self.composite_score}/100",
+            f"- 估值: {self.valuation_score} | 动量: {self.momentum_score} | 质量: {self.quality_score}",
+        ]
+        if self.volatility_30d is not None:
+            lines.append(f"- 30日波动率: {self.volatility_30d:.1f}%")
+        if self.max_drawdown_60d is not None:
+            lines.append(f"- 60日最大回撤: {self.max_drawdown_60d:.1f}%")
+        if self.sharpe_estimate is not None:
+            lines.append(f"- 夏普比率估算: {self.sharpe_estimate:.2f}")
+        lines.append(f"\n**建议仓位**: {self.position_sizing_pct}%")
+        lines.append(f"**分析**: {self.reasoning}")
+        return "\n".join(lines)
+
+
+# === 审查层模型 ===
+
+
+class RiskLevel(str, Enum):
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    CRITICAL = "critical"
+
+
+class RiskReviewResult(str, Enum):
+    APPROVED = "approved"
+    APPROVED_WITH_CONDITIONS = "approved_with_conditions"
+    REJECTED = "rejected"
+    NEEDS_REVISION = "needs_revision"
+
+
+class RiskReview(BaseModel):
+    """风控总监的审核报告。"""
+    stock_code: str
+    stock_name: str
+    timestamp: datetime = Field(default_factory=datetime.now)
+    result: RiskReviewResult
+    overall_risk: RiskLevel
+    risk_score: int = Field(ge=0, le=100, description="风险评分，越高越危险")
+    # 具体风险评估
+    concentration_risk: str = ""  # 集中度风险
+    liquidity_risk: str = ""  # 流动性风险
+    drawdown_risk: str = ""  # 回撤风险
+    event_risk: str = ""  # 事件风险
+    # 审核意见
+    conditions: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    approved_position_pct: Optional[float] = None  # 批准的仓位上限
+    reasoning: str = ""
+
+    def to_markdown(self) -> str:
+        result_names = {
+            RiskReviewResult.APPROVED: "✅ 通过",
+            RiskReviewResult.APPROVED_WITH_CONDITIONS: "⚠️ 有条件通过",
+            RiskReviewResult.REJECTED: "❌ 驳回",
+            RiskReviewResult.NEEDS_REVISION: "🔄 需修改",
+        }
+        risk_names = {
+            RiskLevel.LOW: "🟢 低", RiskLevel.MEDIUM: "🟡 中",
+            RiskLevel.HIGH: "🟠 高", RiskLevel.CRITICAL: "🔴 极高",
+        }
+        lines = [
+            f"### 风控总监审核: {self.stock_name} ({self.stock_code})",
+            f"**审核结果**: {result_names.get(self.result, self.result.value)}",
+            f"**综合风险**: {risk_names.get(self.overall_risk, self.overall_risk.value)} (评分: {self.risk_score}/100)",
+        ]
+        if self.approved_position_pct is not None:
+            lines.append(f"**批准仓位上限**: {self.approved_position_pct}%")
+        lines.append(f"\n**风险评估**:")
+        if self.concentration_risk:
+            lines.append(f"- 集中度: {self.concentration_risk}")
+        if self.liquidity_risk:
+            lines.append(f"- 流动性: {self.liquidity_risk}")
+        if self.drawdown_risk:
+            lines.append(f"- 回撤: {self.drawdown_risk}")
+        if self.event_risk:
+            lines.append(f"- 事件: {self.event_risk}")
+        if self.conditions:
+            lines.append("\n**附加条件**:")
+            for c in self.conditions:
+                lines.append(f"- {c}")
+        if self.warnings:
+            lines.append("\n**风险警告**:")
+            for w in self.warnings:
+                lines.append(f"- ⚠️ {w}")
+        lines.append(f"\n**审核意见**: {self.reasoning}")
         return "\n".join(lines)
