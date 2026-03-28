@@ -7,3 +7,4 @@ output/reports/*
 *.db
 data/events.db
 .vscode/
+.gstack/

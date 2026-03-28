@@ -63,12 +63,17 @@ class BaseAgent(ABC):
             raw_data = self.fetch_data(stock_code)
 
             # 2. 格式化上下文
-            context = DataFormatter.build_context(raw_data)
-            incomplete = any(
-                "数据不可用" in DataFormatter.build_context({k: v})
-                for k, v in raw_data.items()
-                if v is None
-            )
+            # 如果使用工具系统，raw_data 包含 _tool_context
+            if "_tool_context" in raw_data:
+                context = raw_data["_tool_context"]
+                incomplete = "[不可用" in context or "[数据获取失败" in context
+            else:
+                context = DataFormatter.build_context(raw_data)
+                incomplete = any(
+                    "数据不可用" in DataFormatter.build_context({k: v})
+                    for k, v in raw_data.items()
+                    if v is None
+                )
 
             # 3. 调用 LLM 分析
             logger.info(f"[{self.role.value}] 开始分析...")
