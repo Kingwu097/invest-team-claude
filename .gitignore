@@ -4,3 +4,6 @@ __pycache__/
 output/reports/*
 !output/reports/.gitkeep
 .pytest_cache/
+*.db
+data/events.db
+.vscode/

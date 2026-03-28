@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>投资理财专家团队 Dashboard</title>
+  <link rel="preconnect" href="https://api.fontshare.com" />
+  <link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0C0E14;
+      --surface: #161922;
+      --surface-hover: #1C2030;
+      --border: #252A36;
+      --text-primary: #E8ECF4;
+      --text-secondary: #7C859B;
+      --text-muted: #4A5068;
+      --accent: #3B82F6;
+      --accent-hover: #2563EB;
+      --bull: #22C55E;
+      --bear: #EF4444;
+      --neutral-color: #F59E0B;
+      --warning: #F59E0B;
+      --font-display: 'Satoshi', -apple-system, 'PingFang SC', sans-serif;
+      --font-body: 'DM Sans', -apple-system, 'PingFang SC', sans-serif;
+      --font-mono: 'Geist Mono', 'SF Mono', monospace;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text-primary);
+      font-family: var(--font-body);
+      font-size: 15px;
+      line-height: 1.5;
+      overflow-x: hidden;
+    }
+
+    /* Layout */
+    .app { display: flex; height: 100vh; }
+    .sidebar {
+      width: 240px; min-width: 240px;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      display: flex; flex-direction: column;
+      padding: 16px;
+    }
+    .main { flex: 1; overflow-y: auto; padding: 24px 32px; }
+
+    /* Sidebar */
+    .sidebar-title {
+      font-family: var(--font-display);
+      font-size: 18px; font-weight: 700;
+      margin-bottom: 24px;
+      color: var(--text-primary);
+    }
+    .sidebar-section {
+      font-size: 11px; font-weight: 500;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 8px; margin-top: 16px;
+    }
+    .sidebar-item {
+      padding: 8px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 13px;
+      color: var(--text-secondary);
+      transition: all 0.15s;
+    }
+    .sidebar-item:hover { background: var(--surface-hover); color: var(--text-primary); }
+    .sidebar-item.active { background: var(--accent); color: white; }
+    .sidebar-item .rating-dot {
+      display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px;
+    }
+
+    /* Input */
+    .stock-input-group { margin-top: auto; padding-top: 16px; border-top: 1px solid var(--border); }
+    .stock-input {
+      width: 100%; padding: 8px 12px;
+      background: var(--bg); border: 1px solid var(--border);
+      border-radius: 4px; color: var(--text-primary);
+      font-family: var(--font-mono); font-size: 14px;
+      outline: none;
+    }
+    .stock-input:focus { border-color: var(--accent); }
+    .stock-input.error { border-color: var(--bear); }
+    .btn-analyze {
+      width: 100%; margin-top: 8px; padding: 8px;
+      background: var(--accent); color: white; border: none;
+      border-radius: 4px; font-family: var(--font-body);
+      font-weight: 600; font-size: 13px; cursor: pointer;
+      transition: background 0.15s;
+    }
+    .btn-analyze:hover { background: var(--accent-hover); }
+    .btn-analyze:disabled { opacity: 0.5; cursor: not-allowed; }
+    .input-error { color: var(--bear); font-size: 12px; margin-top: 4px; }
+
+    /* Arena Overview */
+    .arena {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; padding: 24px;
+      margin-bottom: 24px; position: relative;
+      min-height: 200px;
+    }
+    .arena-title {
+      font-family: var(--font-display); font-size: 13px;
+      color: var(--text-muted); text-transform: uppercase;
+      letter-spacing: 0.08em; margin-bottom: 16px;
+    }
+    .arena-agents {
+      display: flex; justify-content: space-around; align-items: flex-start;
+      position: relative; min-height: 140px;
+    }
+    .arena-agent {
+      text-align: center; z-index: 2;
+      opacity: 0.3; transition: opacity 0.4s ease-out;
+    }
+    .arena-agent.active { opacity: 1; }
+    .arena-agent-name {
+      font-family: var(--font-display); font-size: 13px;
+      font-weight: 600; margin-bottom: 4px;
+    }
+    .arena-agent-rating {
+      font-family: var(--font-mono); font-size: 20px; font-weight: 700;
+    }
+    .arena-agent-conf {
+      font-family: var(--font-mono); font-size: 12px; color: var(--text-secondary);
+    }
+    .arena-consensus {
+      position: absolute; top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center; z-index: 3;
+      background: var(--surface); padding: 12px 20px;
+      border-radius: 8px; border: 1px solid var(--border);
+    }
+    .arena-consensus.reached {
+      border-color: var(--bull);
+      box-shadow: 0 0 12px rgba(34,197,94,0.2);
+    }
+    .arena-consensus.deadlock { border-color: var(--warning); }
+    .arena-consensus-label {
+      font-size: 11px; color: var(--text-muted);
+      text-transform: uppercase; letter-spacing: 0.08em;
+    }
+    .arena-consensus-rating {
+      font-family: var(--font-display); font-size: 24px; font-weight: 700;
+    }
+    .arena-consensus-conf {
+      font-family: var(--font-mono); font-size: 14px; color: var(--text-secondary);
+    }
+
+    /* SVG lines */
+    .arena-svg {
+      position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+      pointer-events: none; z-index: 1;
+    }
+    .arena-line {
+      stroke: var(--border); stroke-width: 1;
+      stroke-dasharray: 4 4;
+    }
+
+    /* Timeline */
+    .timeline {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; padding: 24px;
+      margin-bottom: 24px;
+    }
+    .timeline-title {
+      font-family: var(--font-display); font-size: 13px;
+      color: var(--text-muted); text-transform: uppercase;
+      letter-spacing: 0.08em; margin-bottom: 16px;
+    }
+    .timeline-items { position: relative; padding-left: 24px; }
+    .timeline-items::before {
+      content: ''; position: absolute; left: 7px; top: 0; bottom: 0;
+      width: 1px; background: var(--border);
+    }
+    .timeline-item {
+      position: relative; margin-bottom: 16px;
+      animation: slideIn 0.4s ease-out forwards;
+      opacity: 0; transform: translateY(8px);
+    }
+    @keyframes slideIn {
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .timeline-dot {
+      position: absolute; left: -21px; top: 4px;
+      width: 10px; height: 10px; border-radius: 50%;
+      border: 2px solid var(--border); background: var(--bg);
+    }
+    .timeline-dot.bull { border-color: var(--bull); background: var(--bull); }
+    .timeline-dot.bear { border-color: var(--bear); background: var(--bear); }
+    .timeline-dot.neutral { border-color: var(--neutral-color); background: var(--neutral-color); }
+    .timeline-dot.accent { border-color: var(--accent); background: var(--accent); }
+    .timeline-dot.debate { border-color: var(--warning); background: var(--warning); }
+    .timeline-dot.consensus {
+      border-color: var(--bull); background: var(--bull);
+      box-shadow: 0 0 8px rgba(34,197,94,0.4);
+    }
+    .timeline-dot.loading {
+      border-color: var(--accent);
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 0.4; }
+      50% { opacity: 1; }
+    }
+    .timeline-time {
+      font-family: var(--font-mono); font-size: 11px;
+      color: var(--text-muted); margin-bottom: 2px;
+    }
+    .timeline-content { font-size: 13px; color: var(--text-primary); }
+    .timeline-detail {
+      font-size: 12px; color: var(--text-secondary); margin-top: 2px;
+    }
+    .timeline-round-divider {
+      position: relative; margin: 20px 0; padding: 4px 0;
+      text-align: center;
+    }
+    .timeline-round-divider span {
+      background: var(--surface); padding: 0 12px;
+      font-family: var(--font-mono); font-size: 11px;
+      color: var(--warning); letter-spacing: 0.05em;
+      position: relative; z-index: 1;
+    }
+    .timeline-round-divider::before {
+      content: ''; position: absolute; left: 0; right: 0;
+      top: 50%; height: 1px; background: var(--border);
+    }
+
+    /* Challenge block */
+    .challenge-block {
+      background: var(--bg); border-left: 2px solid var(--warning);
+      border-radius: 0 4px 4px 0; padding: 8px 12px;
+      margin-top: 4px; font-size: 12px;
+    }
+    .challenge-from {
+      font-family: var(--font-mono); font-size: 11px;
+      color: var(--warning); margin-bottom: 2px;
+    }
+
+    /* Confidence Chart */
+    .chart-container {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; padding: 24px; margin-bottom: 24px;
+    }
+    .chart-title {
+      font-family: var(--font-display); font-size: 13px;
+      color: var(--text-muted); text-transform: uppercase;
+      letter-spacing: 0.08em; margin-bottom: 16px;
+    }
+    .chart-svg { width: 100%; height: 160px; }
+    .chart-legend {
+      display: flex; gap: 16px; margin-top: 8px;
+    }
+    .chart-legend-item {
+      display: flex; align-items: center; gap: 4px;
+      font-size: 12px; color: var(--text-secondary);
+    }
+    .chart-legend-dot { width: 8px; height: 8px; border-radius: 50%; }
+
+    /* Badge */
+    .badge {
+      display: inline-block; padding: 2px 8px;
+      border-radius: 9999px; font-family: var(--font-mono);
+      font-size: 11px; font-weight: 500;
+    }
+    .badge-bull { background: rgba(34,197,94,0.15); color: var(--bull); }
+    .badge-bear { background: rgba(239,68,68,0.15); color: var(--bear); }
+    .badge-neutral { background: rgba(245,158,11,0.15); color: var(--neutral-color); }
+    .badge-divergence {
+      background: transparent; color: var(--warning);
+      border: 1px solid rgba(245,158,11,0.3);
+    }
+
+    /* Empty state */
+    .empty-state {
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      min-height: 400px; color: var(--text-muted);
+    }
+    .empty-state h2 {
+      font-family: var(--font-display); font-size: 20px;
+      color: var(--text-secondary); margin-bottom: 8px;
+    }
+    .empty-state p { font-size: 14px; }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef, useCallback } = React;
+
+    const API_BASE = window.location.origin;
+
+    const RATING_NAMES = {
+      strong_buy: '强烈看多', buy: '看多', neutral: '中性',
+      sell: '看空', strong_sell: '强烈看空',
+    };
+    const ROLE_NAMES = {
+      fundamental: '基本面', macro: '宏观', sentiment: '情绪',
+    };
+    const RATING_COLORS = {
+      strong_buy: 'bull', buy: 'bull', neutral: 'neutral',
+      sell: 'bear', strong_sell: 'bear',
+    };
+
+    function ratingBadgeClass(rating) {
+      if (['strong_buy', 'buy'].includes(rating)) return 'badge-bull';
+      if (['sell', 'strong_sell'].includes(rating)) return 'badge-bear';
+      return 'badge-neutral';
+    }
+
+    function ratingDotColor(rating) {
+      if (['strong_buy', 'buy'].includes(rating)) return '#22C55E';
+      if (['sell', 'strong_sell'].includes(rating)) return '#EF4444';
+      return '#F59E0B';
+    }
+
+    // === Sidebar ===
+    function Sidebar({ sessions, activeSession, onSelect, onAnalyze, isRunning }) {
+      const [code, setCode] = useState('');
+      const [error, setError] = useState('');
+
+      const handleSubmit = (e) => {
+        e.preventDefault();
+        const c = code.trim();
+        if (!/^[036]\d{5}$/.test(c)) {
+          setError('请输入有效的 A 股代码（6 位，0/3/6 开头）');
+          return;
+        }
+        setError('');
+        onAnalyze(c);
+        setCode('');
+      };
+
+      return (
+        <div className="sidebar">
+          <div className="sidebar-title">投资团队</div>
+
+          <div className="sidebar-section">最近分析</div>
+          {sessions.length === 0 && (
+            <div style={{color: 'var(--text-muted)', fontSize: 12, padding: '8px 12px'}}>
+              暂无分析记录
+            </div>
+          )}
+          {sessions.map(s => (
+            <div
+              key={s.session_id}
+              className={`sidebar-item ${activeSession === s.session_id ? 'active' : ''}`}
+              onClick={() => onSelect(s.session_id)}
+            >
+              <span className="rating-dot" style={{
+                backgroundColor: s.final_rating ? ratingDotColor(s.final_rating) : 'var(--text-muted)'
+              }} />
+              {s.stock_name || s.stock_code}
+              <span style={{float:'right', fontFamily:'var(--font-mono)', fontSize: 11}}>
+                {s.status === 'running' ? '⏳' : ''}
+              </span>
+            </div>
+          ))}
+
+          <form className="stock-input-group" onSubmit={handleSubmit}>
+            <input
+              type="text"
+              className={`stock-input ${error ? 'error' : ''}`}
+              placeholder="股票代码，如 600519"
+              value={code}
+              onChange={e => setCode(e.target.value)}
+              maxLength={6}
+            />
+            {error && <div className="input-error">{error}</div>}
+            <button type="submit" className="btn-analyze" disabled={isRunning}>
+              {isRunning ? '分析中...' : '开始分析'}
+            </button>
+          </form>
+        </div>
+      );
+    }
+
+    // === Arena Overview ===
+    function ArenaOverview({ events }) {
+      const agents = {};
+      let consensus = null;
+
+      for (const evt of events) {
+        if (evt.type === 'agent_analysis_completed') {
+          agents[evt.agent] = { rating: evt.rating, confidence: evt.confidence, summary: evt.summary };
+        }
+        if (evt.type === 'confidence_changed') {
+          if (agents[evt.agent]) agents[evt.agent].confidence = evt.confidence;
+        }
+        if (evt.type === 'debate_vote') {
+          if (agents[evt.agent]) {
+            agents[evt.agent].rating = evt.rating;
+            agents[evt.agent].confidence = evt.confidence;
+          }
+        }
+        if (['consensus_reached', 'consensus_deadlock'].includes(evt.type)) {
+          consensus = evt;
+        }
+      }
+
+      const agentKeys = ['fundamental', 'macro', 'sentiment'];
+
+      return (
+        <div className="arena">
+          <div className="arena-title">圆桌概览</div>
+          <div className="arena-agents">
+            {agentKeys.map((key, i) => {
+              const a = agents[key];
+              const active = !!a;
+              return (
+                <div key={key} className={`arena-agent ${active ? 'active' : ''}`}>
+                  <div className="arena-agent-name">{ROLE_NAMES[key]}分析师</div>
+                  {a ? (
+                    <>
+                      <div className="arena-agent-rating" style={{color: ratingDotColor(a.rating)}}>
+                        {RATING_NAMES[a.rating] || a.rating}
+                      </div>
+                      <div className="arena-agent-conf">{a.confidence}%</div>
+                    </>
+                  ) : (
+                    <div className="arena-agent-rating" style={{color: 'var(--text-muted)'}}>—</div>
+                  )}
+                </div>
+              );
+            })}
+            {consensus && (
+              <div className={`arena-consensus ${consensus.type === 'consensus_reached' ? 'reached' : 'deadlock'}`}>
+                <div className="arena-consensus-label">
+                  {consensus.type === 'consensus_deadlock' ? '⚠️ 未达成共识' : '共识'}
+                </div>
+                <div className="arena-consensus-rating" style={{color: ratingDotColor(consensus.rating)}}>
+                  {RATING_NAMES[consensus.rating] || consensus.rating}
+                </div>
+                <div className="arena-consensus-conf">{consensus.confidence}%</div>
+                {consensus.data?.is_high_divergence && (
+                  <span className="badge badge-divergence" style={{marginTop: 4}}>⚡ 高分歧</span>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    // === Timeline ===
+    function Timeline({ events }) {
+      const endRef = useRef(null);
+      useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [events.length]);
+
+      if (events.length === 0) return null;
+
+      const items = [];
+      let lastRound = null;
+
+      for (const evt of events) {
+        // Round dividers
+        if (evt.type === 'debate_round_started' && evt.round !== lastRound) {
+          lastRound = evt.round;
+          const roundNames = { 1: 'Round 1: 交叉审查', 2: 'Round 2: 质疑反驳', 3: 'Round 3: 投票共识' };
+          items.push({ type: 'divider', text: roundNames[evt.round] || `Round ${evt.round}`, key: `div-${evt.round}` });
+          continue;
+        }
+
+        let dotClass = 'accent';
+        let content = evt.summary || evt.type;
+        let detail = '';
+        let challenge = null;
+
+        switch (evt.type) {
+          case 'analysis_started':
+            dotClass = 'accent';
+            content = `开始分析 ${evt.stock_name} (${evt.stock_code})`;
+            break;
+          case 'data_fetch_started':
+            dotClass = 'loading';
+            content = `${ROLE_NAMES[evt.agent] || evt.agent} 获取数据...`;
+            break;
+          case 'agent_analysis_started':
+            dotClass = 'loading';
+            content = `${ROLE_NAMES[evt.agent] || evt.agent}分析师 分析中...`;
+            break;
+          case 'agent_analysis_completed':
+            dotClass = RATING_COLORS[evt.rating] || 'accent';
+            content = `${ROLE_NAMES[evt.agent] || evt.agent}分析师: ${RATING_NAMES[evt.rating] || evt.rating}`;
+            detail = `信心度 ${evt.confidence}% | ${evt.summary || ''}`;
+            break;
+          case 'agent_analysis_failed':
+            dotClass = 'bear';
+            content = `${ROLE_NAMES[evt.agent] || evt.agent}分析师 离线`;
+            break;
+          case 'debate_started':
+            dotClass = 'debate';
+            content = `开始辩论: ${evt.data?.agent_count || 3} 个 Agent 参与`;
+            break;
+          case 'debate_challenge':
+            dotClass = 'debate';
+            challenge = evt;
+            content = `${ROLE_NAMES[evt.agent] || evt.agent} → ${ROLE_NAMES[evt.data?.target] || evt.data?.target}`;
+            break;
+          case 'debate_response':
+            dotClass = evt.data?.position_changed ? 'neutral' : 'accent';
+            content = evt.summary || `${ROLE_NAMES[evt.agent] || evt.agent} 回应`;
+            break;
+          case 'debate_vote':
+            dotClass = RATING_COLORS[evt.rating] || 'accent';
+            content = `${ROLE_NAMES[evt.agent] || evt.agent}: ${RATING_NAMES[evt.rating] || evt.rating} (${evt.confidence}%)`;
+            break;
+          case 'consensus_reached':
+            dotClass = 'consensus';
+            content = `共识达成: ${RATING_NAMES[evt.rating] || evt.rating} (${evt.confidence}%)`;
+            break;
+          case 'consensus_deadlock':
+            dotClass = 'debate';
+            content = `⚠️ 未达成共识`;
+            break;
+          case 'analysis_completed':
+            dotClass = 'consensus';
+            content = `分析完成 | 耗时 ${evt.data?.elapsed}s | Token: ${evt.data?.total_tokens?.toLocaleString()}`;
+            break;
+          case 'analysis_failed':
+            dotClass = 'bear';
+            content = `分析失败: ${evt.data?.error || '未知错误'}`;
+            break;
+          default:
+            if (evt.type?.includes('round') || evt.type?.includes('confidence')) continue;
+            break;
+        }
+
+        items.push({
+          type: 'event', key: evt.id,
+          dotClass, content, detail, challenge,
+          time: evt.timestamp ? new Date(evt.timestamp).toLocaleTimeString('zh-CN') : '',
+        });
+      }
+
+      return (
+        <div className="timeline">
+          <div className="timeline-title">时间线</div>
+          <div className="timeline-items">
+            {items.map((item, i) => {
+              if (item.type === 'divider') {
+                return (
+                  <div key={item.key} className="timeline-round-divider">
+                    <span>{item.text}</span>
+                  </div>
+                );
+              }
+              return (
+                <div key={item.key} className="timeline-item" style={{animationDelay: `${i * 60}ms`}}>
+                  <div className={`timeline-dot ${item.dotClass}`} />
+                  <div className="timeline-time">{item.time}</div>
+                  <div className="timeline-content">{item.content}</div>
+                  {item.detail && <div className="timeline-detail">{item.detail}</div>}
+                  {item.challenge && (
+                    <div className="challenge-block">
+                      <div className="challenge-from">
+                        {ROLE_NAMES[item.challenge.agent]}→{ROLE_NAMES[item.challenge.data?.target]}
+                      </div>
+                      {item.challenge.data?.challenge}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+            <div ref={endRef} />
+          </div>
+        </div>
+      );
+    }
+
+    // === Confidence Chart ===
+    function ConfidenceChart({ events }) {
+      const snapshots = [];
+      const agents = { fundamental: [], macro: [], sentiment: [] };
+      const labels = ['初始'];
+
+      // Collect confidence snapshots at key moments
+      let currentConf = {};
+
+      for (const evt of events) {
+        if (evt.type === 'agent_analysis_completed') {
+          currentConf[evt.agent] = evt.confidence;
+        }
+        if (evt.type === 'debate_round_completed') {
+          labels.push(`R${evt.round}`);
+          for (const key of Object.keys(agents)) {
+            agents[key].push(currentConf[key] ?? null);
+          }
+        }
+        if (evt.type === 'confidence_changed' || evt.type === 'debate_response') {
+          currentConf[evt.agent] = evt.confidence ?? evt.data?.confidence_after;
+        }
+        if (evt.type === 'debate_vote') {
+          currentConf[evt.agent] = evt.confidence;
+        }
+      }
+
+      // Initial values
+      const initial = {};
+      for (const evt of events) {
+        if (evt.type === 'agent_analysis_completed') {
+          initial[evt.agent] = evt.confidence;
+        }
+      }
+
+      if (Object.keys(initial).length === 0) return null;
+
+      // Build chart data
+      const points = {};
+      for (const key of Object.keys(agents)) {
+        points[key] = [initial[key] ?? 50, ...agents[key]];
+      }
+
+      const W = 500, H = 140, PAD = 40;
+      const steps = labels.length;
+      const colors = { fundamental: '#3B82F6', macro: '#EF4444', sentiment: '#F59E0B' };
+
+      function toX(i) { return PAD + (i / Math.max(steps - 1, 1)) * (W - 2 * PAD); }
+      function toY(v) { return H - PAD - ((v ?? 50) / 100) * (H - 2 * PAD); }
+
+      return (
+        <div className="chart-container">
+          <div className="chart-title">信心度变化</div>
+          <svg viewBox={`0 0 ${W} ${H}`} className="chart-svg">
+            {/* Grid */}
+            {[0, 25, 50, 75, 100].map(v => (
+              <g key={v}>
+                <line x1={PAD} y1={toY(v)} x2={W-PAD} y2={toY(v)}
+                  stroke="var(--border)" strokeDasharray="2 2" />
+                <text x={PAD-4} y={toY(v)+4} textAnchor="end"
+                  fill="var(--text-muted)" fontSize="9" fontFamily="var(--font-mono)">{v}</text>
+              </g>
+            ))}
+            {/* X labels */}
+            {labels.map((l, i) => (
+              <text key={i} x={toX(i)} y={H-8} textAnchor="middle"
+                fill="var(--text-muted)" fontSize="9" fontFamily="var(--font-mono)">{l}</text>
+            ))}
+            {/* Lines + dots */}
+            {Object.entries(points).map(([key, vals]) => {
+              const color = colors[key];
+              const pathParts = vals.map((v, i) => `${i === 0 ? 'M' : 'L'}${toX(i)},${toY(v)}`).join(' ');
+              return (
+                <g key={key}>
+                  <path d={pathParts} fill="none" stroke={color} strokeWidth="2"
+                    style={{transition: 'all 0.3s'}} />
+                  {vals.map((v, i) => (
+                    <circle key={i} cx={toX(i)} cy={toY(v)} r="3" fill={color} />
+                  ))}
+                  {vals.length > 0 && (
+                    <text x={toX(vals.length - 1) + 6} y={toY(vals[vals.length - 1]) + 3}
+                      fill={color} fontSize="10" fontFamily="var(--font-mono)">
+                      {vals[vals.length - 1]}%
+                    </text>
+                  )}
+                </g>
+              );
+            })}
+          </svg>
+          <div className="chart-legend">
+            {Object.entries(colors).map(([key, color]) => (
+              <div key={key} className="chart-legend-item">
+                <div className="chart-legend-dot" style={{backgroundColor: color}} />
+                {ROLE_NAMES[key]}
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    // === Main App ===
+    function App() {
+      const [sessions, setSessions] = useState([]);
+      const [activeSession, setActiveSession] = useState(null);
+      const [events, setEvents] = useState([]);
+      const [isRunning, setIsRunning] = useState(false);
+      const eventSourceRef = useRef(null);
+
+      // Load sessions
+      const loadSessions = useCallback(async () => {
+        try {
+          const res = await fetch(`${API_BASE}/api/sessions`);
+          const data = await res.json();
+          setSessions(data);
+        } catch (e) { console.error('Failed to load sessions:', e); }
+      }, []);
+
+      useEffect(() => { loadSessions(); }, [loadSessions]);
+
+      // Load session events (for history/replay)
+      const loadSessionEvents = useCallback(async (sid) => {
+        try {
+          const res = await fetch(`${API_BASE}/api/sessions/${sid}`);
+          const data = await res.json();
+          const evts = (data.events || []).map(e => ({
+            ...e,
+            type: e.event_type,
+            agent: e.agent_role,
+            round: e.round_number,
+            data: typeof e.data_json === 'string' ? JSON.parse(e.data_json) : e.data_json,
+          }));
+          setEvents(evts);
+          setActiveSession(sid);
+        } catch (e) { console.error('Failed to load session events:', e); }
+      }, []);
+
+      // SSE subscription
+      const subscribeSSE = useCallback((sid) => {
+        if (eventSourceRef.current) eventSourceRef.current.close();
+        setEvents([]);
+        setActiveSession(sid);
+
+        const es = new EventSource(`${API_BASE}/api/events/${sid}`);
+        eventSourceRef.current = es;
+
+        es.onmessage = (e) => {
+          try {
+            const data = JSON.parse(e.data);
+            if (data.type === 'stream_end') {
+              es.close();
+              setIsRunning(false);
+              loadSessions();
+              return;
+            }
+            setEvents(prev => [...prev, data]);
+          } catch (err) { console.error('SSE parse error:', err); }
+        };
+        es.onerror = () => {
+          es.close();
+          setIsRunning(false);
+        };
+      }, [loadSessions]);
+
+      // Start analysis
+      const handleAnalyze = useCallback(async (stockCode) => {
+        setIsRunning(true);
+        try {
+          const res = await fetch(`${API_BASE}/api/analyze`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ stock_code: stockCode }),
+          });
+          const data = await res.json();
+          if (data.session_id) {
+            subscribeSSE(data.session_id);
+            // Refresh sessions after a short delay
+            setTimeout(loadSessions, 500);
+          }
+        } catch (e) {
+          console.error('Analysis failed:', e);
+          setIsRunning(false);
+        }
+      }, [subscribeSSE, loadSessions]);
+
+      // Select historical session
+      const handleSelectSession = useCallback((sid) => {
+        if (eventSourceRef.current) eventSourceRef.current.close();
+        setIsRunning(false);
+        loadSessionEvents(sid);
+      }, [loadSessionEvents]);
+
+      // Cleanup
+      useEffect(() => {
+        return () => { if (eventSourceRef.current) eventSourceRef.current.close(); };
+      }, []);
+
+      return (
+        <div className="app">
+          <Sidebar
+            sessions={sessions}
+            activeSession={activeSession}
+            onSelect={handleSelectSession}
+            onAnalyze={handleAnalyze}
+            isRunning={isRunning}
+          />
+          <div className="main">
+            {!activeSession && events.length === 0 ? (
+              <div className="empty-state">
+                <h2>投资理财专家团队 Dashboard</h2>
+                <p>输入股票代码开始第一次 AI 团队分析</p>
+              </div>
+            ) : (
+              <>
+                <ArenaOverview events={events} />
+                <Timeline events={events} />
+                <ConfidenceChart events={events} />
+              </>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
