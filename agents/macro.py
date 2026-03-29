@@ -55,6 +55,7 @@ class MacroAgent(BaseAgent):
         tool_names = [
             "stock_info", "stock_history", "key_metrics",
             "china_lpr", "china_pmi", "industry_boards", "china_cpi",
+            "industry_research",
         ]
         results = self._tools.execute_tools(tool_names, stock_code)
         context = self._tools.build_context(results)

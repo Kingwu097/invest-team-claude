@@ -20,6 +20,8 @@ from agents.sentiment import SentimentAgent
 from agents.advisor import AdvisorAgent
 from agents.quant import QuantAgent
 from agents.risk_officer import RiskOfficerAgent
+from agents.trader import TraderAgent
+from agents.performance import PerformanceTracker
 from config.llm_client import LLMClient, LLMError
 from config.settings import settings
 from core.event_bus import EventBus, event_bus
@@ -96,6 +98,12 @@ class AnalysisPipeline:
                 proposal, quant_assessment, consensus
             )
 
+            # Phase 5: 执行反馈层
+            trade_record, perf_summary = await self._run_execution(
+                session_id, stock_code, stock_name,
+                proposal, risk_review, consensus
+            )
+
             elapsed = time.time() - start_time
             total_tokens = self._llm.total_tokens if self._llm else 0
 
@@ -134,6 +142,8 @@ class AnalysisPipeline:
                 "proposal": proposal,
                 "quant_assessment": quant_assessment,
                 "risk_review": risk_review,
+                "trade_record": trade_record,
+                "performance_summary": perf_summary,
                 "elapsed": round(elapsed, 1),
                 "total_tokens": total_tokens,
             }
@@ -437,6 +447,80 @@ class AnalysisPipeline:
             )
 
         return risk_review
+
+    async def _run_execution(
+        self, session_id: str, stock_code: str, stock_name: str,
+        proposal, risk_review, consensus: ConsensusReport,
+    ):
+        """Phase 5: 执行反馈层——交易执行 + 绩效记录。"""
+        trade_record = None
+        perf_summary = None
+
+        if proposal:
+            # 获取当前价格
+            current_price = None
+            try:
+                import akshare as ak
+                df = ak.stock_zh_a_hist(
+                    symbol=stock_code, period="daily",
+                    start_date=(datetime.now()).strftime("%Y%m%d"),
+                    end_date=datetime.now().strftime("%Y%m%d"),
+                    adjust="qfq",
+                )
+                if df is not None and len(df) > 0:
+                    current_price = float(df.iloc[-1]["收盘"])
+            except Exception:
+                pass
+
+            # 交易执行
+            trader = TraderAgent()
+            trade_record = await trader.execute_trade(proposal, risk_review, current_price)
+
+            if trade_record:
+                event_type = EventType.TRADE_EXECUTED if trade_record.executed else EventType.TRADE_REJECTED
+                await self._emit(
+                    event_type, session_id, stock_code,
+                    stock_name=stock_name, agent_role="trader",
+                    data={
+                        "action": trade_record.action.value,
+                        "position_pct": trade_record.position_pct,
+                        "entry_price": trade_record.entry_price,
+                        "stop_loss": trade_record.stop_loss_price,
+                        "take_profit": trade_record.take_profit_price,
+                        "executed": trade_record.executed,
+                    },
+                    summary=f"交易{'执行' if trade_record.executed else '未执行'}: {trade_record.action.value} {trade_record.position_pct}%",
+                )
+
+            # 绩效记录
+            tracker = PerformanceTracker()
+            tracker.record_trade(
+                session_id=session_id,
+                stock_code=stock_code,
+                stock_name=stock_name,
+                rating=consensus.final_rating.value,
+                confidence=consensus.consensus_confidence,
+                action=proposal.action.value if proposal else "",
+                position_pct=trade_record.position_pct if trade_record else 0,
+                entry_price=current_price,
+            )
+
+            perf_summary = tracker.get_summary()
+            if perf_summary.total_analyses > 0:
+                await self._emit(
+                    EventType.PERFORMANCE_SUMMARY, session_id, stock_code,
+                    stock_name=stock_name, agent_role="performance",
+                    data={
+                        "total_analyses": perf_summary.total_analyses,
+                        "tracked_trades": perf_summary.tracked_trades,
+                        "accuracy_pct": perf_summary.accuracy_pct,
+                        "avg_confidence": perf_summary.avg_confidence,
+                        "total_pnl_pct": perf_summary.total_pnl_pct,
+                    },
+                    summary=f"累计 {perf_summary.total_analyses} 次分析 | 平均信心度 {perf_summary.avg_confidence}%",
+                )
+
+        return trade_record, perf_summary
 
     async def _emit(
         self,

@@ -49,7 +49,7 @@ class FundamentalAgent(BaseAgent):
         )
 
     def fetch_data(self, stock_code: str) -> dict[str, Any]:
-        tool_names = ["stock_info", "stock_history", "financial_summary", "key_metrics"]
+        tool_names = ["stock_info", "stock_history", "financial_summary", "key_metrics", "web_search"]
         results = self._tools.execute_tools(tool_names, stock_code)
         context = self._tools.build_context(results)
         return {"_tool_context": context}

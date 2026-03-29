@@ -95,13 +95,100 @@ class MarginDataTool(BaseTool):
 
 class WebSearchTool(BaseTool):
     name = "web_search"
-    description = "搜索互联网获取最新的行业研报、政策解读、市场分析等信息（当 akshare 数据不足时使用）"
-    parameters_description = "query: 搜索关键词"
+    description = "搜索互联网获取最新的行业研报、政策解读、市场分析（用于补充 akshare 数据不足的信息）"
+    parameters_description = "query: 搜索关键词（会自动拼接股票代码）"
 
     def execute(self, stock_code: str, **kwargs) -> ToolResult:
-        query = kwargs.get("query", f"{stock_code} 最新分析")
-        return ToolResult(
-            tool_name=self.name, success=False,
-            data_text=f"[Web 搜索暂未实现 — 搜索词: {query}]",
-            error="Not implemented yet — Phase 3 将通过 MCP 或 SerpAPI 接入",
-        )
+        query = kwargs.get("query", "")
+        if not query:
+            # 自动构建搜索词
+            from data.market import get_stock_info
+            info = get_stock_info(stock_code)
+            name = info.get("股票简称", stock_code) if info else stock_code
+            query = f"{name} {stock_code} stock analysis investment outlook 2026"
+
+        try:
+            from ddgs import DDGS
+            results = DDGS().text(query, max_results=5)
+
+            if not results:
+                return ToolResult(
+                    tool_name=self.name, success=True,
+                    data_text=f"[搜索 '{query}' 无结果]",
+                    source="DuckDuckGo",
+                )
+
+            text_lines = [f"### Web 搜索: {query}", ""]
+            for r in results:
+                title = r.get("title", "")
+                body = r.get("body", "")[:200]
+                href = r.get("href", "")
+                text_lines.append(f"**{title}**")
+                text_lines.append(f"{body}")
+                text_lines.append(f"[来源: {href}]")
+                text_lines.append("")
+
+            return ToolResult(
+                tool_name=self.name, success=True,
+                data_text="\n".join(text_lines),
+                raw_data=results,
+                data_date=datetime.now().strftime("%Y-%m-%d"),
+                source="DuckDuckGo",
+            )
+        except Exception as e:
+            logger.warning(f"Web 搜索失败: {e}")
+            return ToolResult(
+                tool_name=self.name, success=False,
+                data_text=f"[Web 搜索失败: {e}]",
+                error=str(e),
+            )
+
+
+class IndustryResearchTool(BaseTool):
+    name = "industry_research"
+    description = "搜索行业研究报告和政策动态，获取标的所在行业的最新分析"
+
+    def execute(self, stock_code: str, **kwargs) -> ToolResult:
+        from data.market import get_stock_info
+        info = get_stock_info(stock_code)
+        name = info.get("股票简称", stock_code) if info else stock_code
+        industry = info.get("行业", "") if info else ""
+
+        queries = [
+            f"{industry or name} industry analysis outlook 2026",
+            f"{name} {industry} policy regulation China",
+        ]
+
+        try:
+            from ddgs import DDGS
+            all_results = []
+            for q in queries:
+                results = DDGS().text(q, max_results=3)
+                all_results.extend(results)
+
+            if not all_results:
+                return ToolResult(
+                    tool_name=self.name, success=True,
+                    data_text=f"[行业研究搜索无结果: {industry or name}]",
+                    source="DuckDuckGo",
+                )
+
+            text_lines = [f"### 行业研究: {industry or name}", ""]
+            for r in all_results[:6]:
+                text_lines.append(f"**{r.get('title', '')}**")
+                text_lines.append(f"{r.get('body', '')[:200]}")
+                text_lines.append("")
+
+            return ToolResult(
+                tool_name=self.name, success=True,
+                data_text="\n".join(text_lines),
+                raw_data=all_results,
+                data_date=datetime.now().strftime("%Y-%m-%d"),
+                source="DuckDuckGo",
+            )
+        except Exception as e:
+            return ToolResult(
+                tool_name=self.name, success=False,
+                data_text=f"[行业研究搜索失败: {e}]",
+                error=str(e),
+            )

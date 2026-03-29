@@ -21,6 +21,8 @@ from agents.sentiment import SentimentAgent
 from agents.advisor import AdvisorAgent
 from agents.quant import QuantAgent
 from agents.risk_officer import RiskOfficerAgent
+from agents.trader import TraderAgent
+from agents.performance import PerformanceTracker
 from debate.orchestrator import DebateOrchestrator
 from models.report import AnalysisReport
 
@@ -129,6 +131,45 @@ async def run_analysis(stock_code: str):
             for w in risk_review.warnings:
                 print(f"  ⚠️ {w}")
 
+    # Phase 5: 执行反馈层
+    print(f"\n📋 Phase 5: 执行反馈层...\n")
+    trade_record = None
+    perf_summary = None
+    if proposal:
+        # 获取当前价格
+        current_price = None
+        try:
+            from data.market import get_stock_history
+            hist = get_stock_history(stock_code, days=5)
+            if hist is not None and len(hist) > 0:
+                current_price = float(hist.iloc[-1]["收盘"])
+        except Exception:
+            pass
+
+        trader = TraderAgent()
+        trade_record = await trader.execute_trade(proposal, risk_review, current_price)
+        if trade_record:
+            status = "✅ 已执行" if trade_record.executed else "⏸️ 未执行"
+            print(f"  {status}: {trade_record.action.value} | 仓位 {trade_record.position_pct}%")
+            if trade_record.entry_price:
+                print(f"  执行价: {trade_record.entry_price}")
+            if trade_record.stop_loss_price:
+                print(f"  止损: {trade_record.stop_loss_price} | 止盈: {trade_record.take_profit_price}")
+
+        # 绩效记录
+        tracker = PerformanceTracker()
+        tracker.record_trade(
+            session_id="cli_" + datetime.now().strftime("%Y%m%d%H%M%S"),
+            stock_code=stock_code, stock_name=stock_name,
+            rating=consensus.final_rating.value,
+            confidence=consensus.consensus_confidence,
+            action=proposal.action.value,
+            position_pct=trade_record.position_pct if trade_record else 0,
+            entry_price=current_price,
+        )
+        perf_summary = tracker.get_summary()
+        print(f"  📊 累计分析 {perf_summary.total_analyses} 次 | 平均信心度 {perf_summary.avg_confidence}%")
+
     elapsed = time.time() - start_time
 
     # 输出报告
@@ -149,6 +190,10 @@ async def run_analysis(stock_code: str):
         print("\n" + quant_assessment.to_markdown())
     if risk_review:
         print("\n" + risk_review.to_markdown())
+    if trade_record:
+        print("\n" + trade_record.to_markdown())
+    if perf_summary:
+        print("\n" + perf_summary.to_markdown())
 
     # 保存到文件
     output_dir = settings.OUTPUT_DIR
@@ -220,12 +265,60 @@ def main():
     parser.add_argument(
         "--stock", "-s",
         type=validate_stock_code,
+        nargs="+",
         required=True,
-        help="A 股股票代码（如 600519）",
+        help="A 股股票代码（支持多只，如 600519 300750 000858）",
     )
     args = parser.parse_args()
 
-    asyncio.run(run_analysis(args.stock))
+    if len(args.stock) == 1:
+        asyncio.run(run_analysis(args.stock[0]))
+    else:
+        asyncio.run(run_portfolio_analysis(args.stock))
+
+
+async def run_portfolio_analysis(stock_codes: list[str]):
+    """多股票组合分析。"""
+    from agents.performance import PerformanceTracker
+
+    start_time = time.time()
+    print(f"\n{'='*60}")
+    print(f"  投资组合分析: {', '.join(stock_codes)}")
+    print(f"{'='*60}\n")
+
+    results = []
+    for i, code in enumerate(stock_codes, 1):
+        print(f"\n{'─'*40}")
+        print(f"  [{i}/{len(stock_codes)}] 分析 {code}")
+        print(f"{'─'*40}")
+        try:
+            await run_analysis(code)
+        except Exception as e:
+            print(f"  ❌ {code} 分析失败: {e}")
+
+    elapsed = time.time() - start_time
+
+    # 组合绩效
+    tracker = PerformanceTracker()
+    perf = tracker.get_summary()
+    trades = tracker.list_trades(limit=len(stock_codes))
+
+    print(f"\n{'='*60}")
+    print(f"  组合分析完成 | {len(stock_codes)} 只股票 | 总耗时 {elapsed:.0f}s")
+    print(f"{'='*60}\n")
+
+    print("## 投资组合汇总\n")
+    print("| 股票 | 操作 | 仓位 | 评级 | 信心度 |")
+    print("|------|------|------|------|--------|")
+    for t in trades:
+        print(f"| {t.get('stock_name', t['stock_code'])} | {t.get('action', '-')} | {t.get('position_pct', 0)}% | {t.get('rating', '-')} | {t.get('confidence', 0)}% |")
+
+    # 检查总仓位
+    total_pct = sum(t.get("position_pct", 0) for t in trades)
+    cash_pct = max(0, 100 - total_pct)
+    print(f"\n**总仓位**: {total_pct:.1f}% | **现金**: {cash_pct:.1f}%")
+
+    print(f"\n{perf.to_markdown()}")
 
 
 if __name__ == "__main__":

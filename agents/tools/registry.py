@@ -9,7 +9,8 @@ from agents.tools.macro_tools import (
     LPRTool, PMITool, IndustryBoardsTool, ChinaCPITool,
 )
 from agents.tools.sentiment_tools import (
-    StockNewsTool, NorthFlowTool, MarginDataTool, WebSearchTool,
+    StockNewsTool, NorthFlowTool, MarginDataTool,
+    WebSearchTool, IndustryResearchTool,
 )
 
 
@@ -20,6 +21,7 @@ def create_fundamental_tools() -> ToolRegistry:
     registry.register(StockHistoryTool())
     registry.register(FinancialSummaryTool())
     registry.register(KeyMetricsTool())
+    registry.register(WebSearchTool())
     return registry
 
 
@@ -33,6 +35,7 @@ def create_macro_tools() -> ToolRegistry:
     registry.register(PMITool())
     registry.register(IndustryBoardsTool())
     registry.register(ChinaCPITool())
+    registry.register(IndustryResearchTool())
     return registry
 
 

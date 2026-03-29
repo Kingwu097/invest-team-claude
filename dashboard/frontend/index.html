@@ -597,6 +597,21 @@
             if (evt.data?.warnings?.length) detail += ` | 警告: ${evt.data.warnings.join('; ')}`;
             break;
           }
+          case 'trade_executed':
+            dotClass = 'bull';
+            content = `交易执行: ${evt.data?.action} | 仓位 ${evt.data?.position_pct}%`;
+            if (evt.data?.entry_price) detail = `执行价: ${evt.data.entry_price}`;
+            if (evt.data?.stop_loss) detail += ` | 止损: ${evt.data.stop_loss} | 止盈: ${evt.data.take_profit}`;
+            break;
+          case 'trade_rejected':
+            dotClass = 'bear';
+            content = '交易未执行（风控驳回）';
+            break;
+          case 'performance_summary':
+            dotClass = 'accent';
+            content = `绩效: 累计 ${evt.data?.total_analyses} 次分析 | 平均信心度 ${evt.data?.avg_confidence}%`;
+            if (evt.data?.accuracy_pct) detail = `方向准确率: ${evt.data.accuracy_pct}%`;
+            break;
           default:
             if (evt.type?.includes('round') || evt.type?.includes('confidence')) continue;
             break;

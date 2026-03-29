@@ -165,6 +165,15 @@ async def get_session(session_id: str):
     return {"session": session, "events": events}
 
 
+@app.get("/api/performance")
+async def get_performance():
+    """获取绩效汇总。"""
+    from agents.performance import PerformanceTracker
+    tracker = PerformanceTracker()
+    summary = tracker.get_summary()
+    trades = tracker.list_trades(limit=50)
+    return {"summary": summary.model_dump(), "trades": trades}
+
 # 静态文件服务
 FRONTEND_DIR = Path(__file__).parent / "frontend"
 

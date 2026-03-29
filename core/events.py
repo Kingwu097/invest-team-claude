@@ -50,6 +50,11 @@ class EventType(str, Enum):
     RISK_REVIEW_STARTED = "risk_review_started"
     RISK_REVIEW_COMPLETED = "risk_review_completed"
 
+    # 执行反馈层
+    TRADE_EXECUTED = "trade_executed"
+    TRADE_REJECTED = "trade_rejected"
+    PERFORMANCE_SUMMARY = "performance_summary"
+
 
 class AnalysisEvent(BaseModel):
     """分析事件。所有事件的统一结构。"""
