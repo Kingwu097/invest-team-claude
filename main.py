@@ -266,15 +266,99 @@ def main():
         "--stock", "-s",
         type=validate_stock_code,
         nargs="+",
-        required=True,
         help="A 股股票代码（支持多只，如 600519 300750 000858）",
+    )
+    parser.add_argument(
+        "--chat", "-c",
+        action="store_true",
+        help="进入自然语言交互模式",
     )
     args = parser.parse_args()
 
-    if len(args.stock) == 1:
-        asyncio.run(run_analysis(args.stock[0]))
+    if args.chat:
+        asyncio.run(run_chat_mode())
+    elif args.stock:
+        if len(args.stock) == 1:
+            asyncio.run(run_analysis(args.stock[0]))
+        else:
+            asyncio.run(run_portfolio_analysis(args.stock))
     else:
-        asyncio.run(run_portfolio_analysis(args.stock))
+        parser.print_help()
+
+
+async def run_chat_mode():
+    """自然语言交互模式。"""
+    from agents.chat import (
+        parse_intent, parse_intent_with_llm, get_help_text,
+        IntentType,
+    )
+    from agents.performance import PerformanceTracker
+
+    print(f"\n{'='*60}")
+    print("  投资理财专家团队 — 自然语言交互模式")
+    print(f"{'='*60}")
+    print(get_help_text())
+
+    llm = None
+    try:
+        llm = LLMClient()
+    except Exception:
+        pass
+
+    while True:
+        try:
+            query = input("\n💬 你: ").strip()
+        except (KeyboardInterrupt, EOFError):
+            print("\n再见！")
+            break
+
+        if not query:
+            continue
+        if query.lower() in ("退出", "exit", "quit", "q"):
+            print("再见！")
+            break
+
+        # 解析意图
+        if llm:
+            intent = await parse_intent_with_llm(query, llm)
+        else:
+            intent = parse_intent(query)
+
+        if intent.intent_type == IntentType.HELP:
+            print(get_help_text())
+
+        elif intent.intent_type == IntentType.PERFORMANCE:
+            tracker = PerformanceTracker()
+            summary = tracker.get_summary()
+            print(f"\n{summary.to_markdown()}")
+            trades = tracker.list_trades(limit=10)
+            if trades:
+                print("\n### 最近交易记录")
+                for t in trades:
+                    print(f"  {t.get('analysis_date','')} | {t.get('stock_name', t['stock_code'])} | "
+                          f"{t.get('action','-')} | {t.get('rating','-')} ({t.get('confidence',0)}%)")
+
+        elif intent.intent_type == IntentType.SINGLE_STOCK:
+            print(f"\n📊 分析 {intent.stock_codes[0]}...")
+            try:
+                await run_analysis(intent.stock_codes[0])
+            except Exception as e:
+                print(f"❌ 分析失败: {e}")
+
+        elif intent.intent_type in (IntentType.MULTI_STOCK, IntentType.SECTOR):
+            label = f"板块 [{intent.sector}]" if intent.sector else "组合"
+            print(f"\n📊 {label}分析: {', '.join(intent.stock_codes)}...")
+            try:
+                await run_portfolio_analysis(intent.stock_codes)
+            except Exception as e:
+                print(f"❌ 分析失败: {e}")
+
+        elif intent.intent_type == IntentType.UNKNOWN:
+            print("🤔 没有识别到股票代码或意图。试试：")
+            print("  · 输入股票代码：600519")
+            print("  · 输入股票名称：分析茅台")
+            print("  · 输入板块名称：新能源板块")
+            print("  · 输入 '帮助' 查看更多用法")
 
 
 async def run_portfolio_analysis(stock_codes: list[str]):

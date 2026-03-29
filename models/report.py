@@ -194,14 +194,19 @@ class ConsensusReport(BaseModel):
         insights: list[str],
         debate_summary: str,
         total_tokens: int,
+        agent_weights: Optional[dict[str, float]] = None,
     ) -> "ConsensusReport":
-        """从投票结果生成共识报告（信心度加权多数制）。"""
+        """从投票结果生成共识报告（信心度加权多数制，支持 Agent 进化权重）。"""
         if not votes:
             raise ValueError("No votes to build consensus from")
 
+        # 应用 Agent 进化权重
+        weights = agent_weights or {}
         rating_weights: dict[Rating, float] = {}
         for v in votes:
-            rating_weights[v.rating] = rating_weights.get(v.rating, 0) + v.confidence
+            w = weights.get(v.agent.value, 1.0) if weights else 1.0
+            weighted_conf = v.confidence * w
+            rating_weights[v.rating] = rating_weights.get(v.rating, 0) + weighted_conf
 
         final_rating = max(rating_weights, key=rating_weights.get)  # type: ignore
         consensus_conf = sum(v.confidence for v in votes) / len(votes)

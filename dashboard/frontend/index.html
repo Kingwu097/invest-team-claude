@@ -760,12 +760,109 @@
       );
     }
 
+    // === Performance Dashboard ===
+    function PerformanceDashboard() {
+      const [perf, setPerf] = useState(null);
+      const [weights, setWeights] = useState(null);
+
+      useEffect(() => {
+        fetch(`${API_BASE}/api/performance`).then(r => r.json()).then(setPerf).catch(() => {});
+        fetch(`${API_BASE}/api/evolution`).then(r => r.json()).then(setWeights).catch(() => {});
+      }, []);
+
+      if (!perf) return null;
+      const s = perf.summary;
+      const trades = perf.trades || [];
+
+      return (
+        <div>
+          <div className="arena" style={{marginBottom: 24}}>
+            <div className="arena-title">绩效仪表盘</div>
+            <div style={{display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16}}>
+              <div style={{textAlign: 'center'}}>
+                <div style={{fontFamily: 'var(--font-mono)', fontSize: 28, fontWeight: 700, color: 'var(--accent)'}}>
+                  {s.total_analyses}
+                </div>
+                <div style={{fontSize: 12, color: 'var(--text-muted)'}}>总分析次数</div>
+              </div>
+              <div style={{textAlign: 'center'}}>
+                <div style={{fontFamily: 'var(--font-mono)', fontSize: 28, fontWeight: 700,
+                  color: s.accuracy_pct && s.accuracy_pct > 50 ? 'var(--bull)' : 'var(--text-secondary)'}}>
+                  {s.accuracy_pct != null ? `${s.accuracy_pct}%` : '—'}
+                </div>
+                <div style={{fontSize: 12, color: 'var(--text-muted)'}}>方向准确率</div>
+              </div>
+              <div style={{textAlign: 'center'}}>
+                <div style={{fontFamily: 'var(--font-mono)', fontSize: 28, fontWeight: 700, color: 'var(--neutral-color)'}}>
+                  {s.avg_confidence}%
+                </div>
+                <div style={{fontSize: 12, color: 'var(--text-muted)'}}>平均信心度</div>
+              </div>
+              <div style={{textAlign: 'center'}}>
+                <div style={{fontFamily: 'var(--font-mono)', fontSize: 28, fontWeight: 700,
+                  color: s.total_pnl_pct >= 0 ? 'var(--bull)' : 'var(--bear)'}}>
+                  {s.total_pnl_pct >= 0 ? '+' : ''}{s.total_pnl_pct}%
+                </div>
+                <div style={{fontSize: 12, color: 'var(--text-muted)'}}>累计收益</div>
+              </div>
+            </div>
+          </div>
+
+          {weights && (
+            <div className="chart-container" style={{marginBottom: 24}}>
+              <div className="chart-title">Agent 进化权重</div>
+              {Object.entries(weights.weights || {}).map(([role, w]) => (
+                <div key={role} style={{display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8}}>
+                  <span style={{fontFamily: 'var(--font-mono)', fontSize: 12, width: 100, color: 'var(--text-secondary)'}}>
+                    {ROLE_NAMES[role] || role}
+                  </span>
+                  <div style={{flex: 1, height: 8, background: 'var(--bg)', borderRadius: 4, overflow: 'hidden'}}>
+                    <div style={{width: `${w / 1.5 * 100}%`, height: '100%', background: 'var(--accent)',
+                      borderRadius: 4, transition: 'width 0.3s'}} />
+                  </div>
+                  <span style={{fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-primary)', width: 40}}>
+                    {w.toFixed(2)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {trades.length > 0 && (
+            <div className="timeline" style={{marginBottom: 24}}>
+              <div className="timeline-title">交易记录</div>
+              <div style={{fontSize: 13}}>
+                {trades.slice(0, 10).map((t, i) => (
+                  <div key={i} style={{padding: '8px 0', borderBottom: '1px solid var(--border)',
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+                    <div>
+                      <span style={{color: 'var(--text-primary)', fontWeight: 500}}>
+                        {t.stock_name || t.stock_code}
+                      </span>
+                      <span className={`badge ${t.rating?.includes('buy') ? 'badge-bull' : t.rating?.includes('sell') ? 'badge-bear' : 'badge-neutral'}`}
+                        style={{marginLeft: 8}}>
+                        {t.action || t.rating}
+                      </span>
+                    </div>
+                    <div style={{fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-secondary)'}}>
+                      {t.position_pct}% | {t.confidence}% | {t.analysis_date}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
     // === Main App ===
     function App() {
       const [sessions, setSessions] = useState([]);
       const [activeSession, setActiveSession] = useState(null);
       const [events, setEvents] = useState([]);
       const [isRunning, setIsRunning] = useState(false);
+      const [view, setView] = useState('analysis'); // 'analysis' | 'performance'
       const eventSourceRef = useRef(null);
 
       // Load sessions
@@ -866,7 +963,28 @@
             isRunning={isRunning}
           />
           <div className="main">
-            {!activeSession && events.length === 0 ? (
+            <div style={{display: 'flex', gap: 8, marginBottom: 20}}>
+              <button onClick={() => setView('analysis')}
+                style={{padding: '6px 16px', borderRadius: 4, border: 'none', cursor: 'pointer',
+                  fontFamily: 'var(--font-body)', fontSize: 13, fontWeight: 500,
+                  background: view === 'analysis' ? 'var(--accent)' : 'var(--surface)',
+                  color: view === 'analysis' ? 'white' : 'var(--text-secondary)',
+                  transition: 'all 0.15s'}}>
+                分析
+              </button>
+              <button onClick={() => setView('performance')}
+                style={{padding: '6px 16px', borderRadius: 4, border: 'none', cursor: 'pointer',
+                  fontFamily: 'var(--font-body)', fontSize: 13, fontWeight: 500,
+                  background: view === 'performance' ? 'var(--accent)' : 'var(--surface)',
+                  color: view === 'performance' ? 'white' : 'var(--text-secondary)',
+                  transition: 'all 0.15s'}}>
+                绩效
+              </button>
+            </div>
+
+            {view === 'performance' ? (
+              <PerformanceDashboard />
+            ) : !activeSession && events.length === 0 ? (
               <div className="empty-state">
                 <div className="empty-state-icon">
                   <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">

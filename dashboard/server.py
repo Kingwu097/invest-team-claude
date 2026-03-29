@@ -174,6 +174,24 @@ async def get_performance():
     trades = tracker.list_trades(limit=50)
     return {"summary": summary.model_dump(), "trades": trades}
 
+
+@app.get("/api/evolution")
+async def get_evolution():
+    """获取 Agent 进化权重。"""
+    from agents.evolution import AgentEvolution
+    evo = AgentEvolution()
+    return {"weights": evo.get_weights()}
+
+
+@app.post("/api/evolution/calibrate")
+async def calibrate_evolution():
+    """触发 Agent 权重校准。"""
+    from agents.evolution import AgentEvolution
+    evo = AgentEvolution()
+    result = evo.calibrate()
+    return result
+
+
 # 静态文件服务
 FRONTEND_DIR = Path(__file__).parent / "frontend"
 
